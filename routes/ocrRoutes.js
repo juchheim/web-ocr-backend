@@ -1,5 +1,6 @@
 import express from 'express';
 import upload from '../middlewares/multerConfig.js';
+import { protect as protectRoute } from './auth.js'; // Import the protect middleware
 
 // Helper function to generate the asset URL
 function generateAssetUrl(assetTagString) {
@@ -31,7 +32,11 @@ function generateAssetUrl(assetTagString) {
 export default function createOcrRoutes(openai, db) {
   const router = express.Router();
 
-  router.post('/extract-text', upload.array('photos'), async (req, res) => {
+  // Apply protectRoute middleware before the multer upload and the main route handler
+  router.post('/extract-text', protectRoute, upload.array('photos'), async (req, res) => {
+    // The req.user object will be available here if authentication is successful
+    // console.log('Authenticated user:', req.user);
+
     if (!req.files?.length) {
       return res.status(400).json({ error: 'No photos uploaded.' });
     }
@@ -67,6 +72,7 @@ export default function createOcrRoutes(openai, db) {
         allExtractedTexts.push(assetTagFromAI.trim()); // Add trimmed version to results for frontend
 
         const potentialAssetTag = assetTagFromAI.trim(); // This is what AI returned, trimmed
+        const roomNumberFromBody = req.body.roomNumber ? req.body.roomNumber.trim() : null;
 
         if (potentialAssetTag !== '') { // Only attempt to process if AI returned some non-empty (after trim) text
           const assetUrl = generateAssetUrl(potentialAssetTag); // Validates and generates URL
@@ -80,8 +86,18 @@ export default function createOcrRoutes(openai, db) {
                 scannedAt: new Date(),
                 sourceImageOriginalName: file.originalname // Optional: store original filename
               };
+
+              if (roomNumberFromBody) {
+                docToInsert.roomNumber = roomNumberFromBody;
+              }
+
               const result = await assetTagsCollection.insertOne(docToInsert);
-              console.log(`Asset tag '${potentialAssetTag}' (URL: ${assetUrl}) from image '${file.originalname || 'unknown'}' saved to MongoDB with id: ${result.insertedId}`);
+              let logMessage = `Asset tag '${potentialAssetTag}' (URL: ${assetUrl})`;
+              if (roomNumberFromBody) {
+                logMessage += ` for room '${roomNumberFromBody}'`;
+              }
+              logMessage += ` from image '${file.originalname || 'unknown'}' saved to MongoDB with id: ${result.insertedId}`;
+              console.log(logMessage);
             } catch (dbErr) {
               console.error("Error saving asset tag to MongoDB:", dbErr);
               // Continue processing other images even if one DB save fails
