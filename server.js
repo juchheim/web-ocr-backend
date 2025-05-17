@@ -22,6 +22,7 @@ const allowedOrigins = [
   'https://web-ocr-frontend-i17xzv2ko-ernest-juchheims-projects.vercel.app'
 ];
 
+
 // If FRONTEND_ORIGIN is set in .env or environment, add it to the list of allowed origins.
 if (envFrontendOrigin) {
   if (!allowedOrigins.includes(envFrontendOrigin)) { // Avoid duplicates
