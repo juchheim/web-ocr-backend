@@ -82,7 +82,8 @@ app.post('/extract-text', upload.array('photos'), async (req, res) => {
       ],
     };
 
-    // Log the exact payload being sent to OpenAI for debugging
+    // Log the model being used and the exact payload being sent to OpenAI for debugging
+    console.log(`Using OpenAI model: ${openAiPayload.model}`);
     console.log('Sending to OpenAI:', JSON.stringify(openAiPayload, null, 2));
 
     const completion = await openai.chat.completions.create(openAiPayload);
