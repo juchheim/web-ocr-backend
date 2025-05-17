@@ -61,26 +61,30 @@ app.post('/extract-text', upload.array('photos'), async (req, res) => {
     }
 
     // Convert each buffer to a data URL accepted by OpenAI
-    const images = req.files.map((file) => {
+    const mappedImages = req.files.map((file) => {
       const base64 = file.buffer.toString('base64');
       const dataUrl = `data:${file.mimetype};base64,${base64}`;
-      return { type: 'image_url', image_url: { url: dataUrl } };
+      return { type: 'image_url', image_url: { url: dataUrl, detail: 'low' } };
     });
 
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-4.1-nano',
+    const openAiPayload = {
+      model: 'gpt-4o',
       max_tokens: 2048,
       messages: [
         {
           role: 'user',
           content: [
             { type: 'text', text: 'Extract all visible text exactly as it appears. Return plain text only.' },
-            ...images,
+            ...mappedImages,
           ],
         },
       ],
-      detail: 'low',
-    });
+    };
+
+    // Log the exact payload being sent to OpenAI for debugging
+    console.log('Sending to OpenAI:', JSON.stringify(openAiPayload, null, 2));
+
+    const completion = await openai.chat.completions.create(openAiPayload);
 
     const text = completion.choices?.[0]?.message?.content?.trim() || '';
     res.json({ text });
