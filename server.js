@@ -69,7 +69,7 @@ app.post('/extract-text', upload.array('photos'), async (req, res) => {
     });
 
     const openAiPayload = {
-      model: 'gpt-4o',
+      model: 'gpt-4.1-nano',
       max_tokens: 2048,
       messages: [
         {
