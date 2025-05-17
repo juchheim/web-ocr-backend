@@ -31,6 +31,7 @@ export default function createOcrRoutes(openai, db) {
         ],
       };
 
+      // logging
       // Log the model being used and the exact payload being sent to OpenAI for debugging
       console.log(`Using OpenAI model: ${openAiPayload.model}`);
       console.log('Sending to OpenAI:', JSON.stringify(openAiPayload, null, 2));
