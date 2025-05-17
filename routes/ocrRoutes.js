@@ -24,7 +24,7 @@ export default function createOcrRoutes(openai) {
           {
             role: 'user',
             content: [
-              { type: 'text', text: 'Extract all visible text exactly as it appears. Return plain text only.' },
+              { type: 'text', text: 'Scan the image(s) for an asset tag number. An asset tag number is a numerical identifier, typically 5 digits long (e.g., 12345). Identify the most likely asset tag number from any text visible. Return only this 5-digit number. If multiple plausible 5-digit asset tags are found, return the most prominent or clearest one. If no 5-digit asset tag is clearly identifiable, return an empty string.' },
               ...mappedImages,
             ],
           },
