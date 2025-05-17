@@ -1,6 +1,17 @@
 import express from 'express';
 import upload from '../middlewares/multerConfig.js';
 
+// Helper function to generate the asset URL
+function generateAssetUrl(assetTagString) {
+  if (!assetTagString || typeof assetTagString !== 'string') {
+    return null;
+  }
+  const baseUrl = "https://humphreys.camarathon.net/MarathonWeb/FA/Activities/Assets/AssetMain.aspx?FormAction=Edit&AssetNo=";
+  const normalizedTag = String(parseInt(assetTagString.trim(), 10)); // Remove leading zeros
+  const paddedTag = normalizedTag.padStart(12, '0'); // Pad to 12 digits
+  return `${baseUrl}${paddedTag}&SortGrid=AssetNo&ItemFilterID=170851`;
+}
+
 // This function accepts the openai client and db instance as arguments
 export default function createOcrRoutes(openai, db) {
   const router = express.Router();
@@ -26,7 +37,7 @@ export default function createOcrRoutes(openai, db) {
             {
               role: 'user',
               content: [
-                { type: 'text', text: 'Scan the image(s) for an asset tag number. An asset tag number is a numerical identifier, typically 5 digits long (e.g., 12345). Identify the most likely asset tag number from any text visible. Return only this 5-digit number. If multiple plausible 5-digit asset tags are found, return the most prominent or clearest one. If no 5-digit asset tag is clearly identifiable, return an empty string.' },
+                { type: 'text', text: 'Scan the image for an asset tag number. Asset tags are numerical identifiers, for example, 12345 or 01948. The number of digits can vary. Extract the sequence of digits that represents the asset tag, including any leading zeros if they appear to be part of the tag. For instance, if the tag reads "01948", return "01948". If it reads "12345", return "12345". Return only the most likely asset tag number. If no clear asset tag number is found, return an empty string.' },
                 ...imagePayload, // Send only one image at a time
               ],
             },
@@ -41,15 +52,19 @@ export default function createOcrRoutes(openai, db) {
         allExtractedTexts.push(assetTag); // Add to our array of results
 
         if (assetTag && assetTag.trim() !== '') {
+          const assetTagValue = assetTag.trim();
+          const assetUrl = generateAssetUrl(assetTagValue); // Generate the URL
+
           try {
             const assetTagsCollection = db.collection('asset_tags');
             const docToInsert = { 
-              assetTag: assetTag.trim(), 
+              assetTag: assetTagValue, 
+              assetUrl: assetUrl, // Store the generated URL
               scannedAt: new Date(),
               sourceImageOriginalName: file.originalname // Optional: store original filename
             };
             const result = await assetTagsCollection.insertOne(docToInsert);
-            console.log(`Asset tag '${assetTag}' from image '${file.originalname || 'unknown'}' saved to MongoDB with id: ${result.insertedId}`);
+            console.log(`Asset tag '${assetTagValue}' (URL: ${assetUrl}) from image '${file.originalname || 'unknown'}' saved to MongoDB with id: ${result.insertedId}`);
           } catch (dbErr) {
             console.error("Error saving asset tag to MongoDB:", dbErr);
             // Continue processing other images even if one DB save fails
