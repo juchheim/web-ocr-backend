@@ -1,8 +1,8 @@
 import express from 'express';
 import upload from '../middlewares/multerConfig.js';
 
-// This function accepts the openai client as an argument
-export default function createOcrRoutes(openai) {
+// This function accepts the openai client and db instance as arguments
+export default function createOcrRoutes(openai, db) {
   const router = express.Router();
 
   router.post('/extract-text', upload.array('photos'), async (req, res) => {
@@ -36,12 +36,36 @@ export default function createOcrRoutes(openai) {
       console.log('Sending to OpenAI:', JSON.stringify(openAiPayload, null, 2));
 
       const completion = await openai.chat.completions.create(openAiPayload);
-      const text = completion.choices?.[0]?.message?.content?.trim() || '';
-      res.json({ text });
+      const assetTag = completion.choices?.[0]?.message?.content?.trim() || '';
+      
+      // Save to MongoDB if assetTag is found
+      if (assetTag && assetTag.trim() !== '') {
+        try {
+          const assetTagsCollection = db.collection('asset_tags');
+          const docToInsert = { 
+            assetTag: assetTag.trim(), 
+            scannedAt: new Date() 
+          };
+          const result = await assetTagsCollection.insertOne(docToInsert);
+          console.log(`Asset tag '${assetTag}' saved to MongoDB with id: ${result.insertedId}`);
+        } catch (dbErr) {
+          console.error("Error saving asset tag to MongoDB:", dbErr); 
+          // Optionally, inform the client of DB error, but for now, prioritize OCR result
+        }
+      }
+      
+      res.json({ text: assetTag });
 
     } catch (err) {
       console.error('Error in /extract-text route:', err);
-      res.status(500).json({ error: 'Failed to process images.', details: err.message });
+      // Ensure that the error response includes a JSON body, as expected by the frontend
+      let errorMessage = 'Failed to process images.';
+      if (err.response && err.response.data && err.response.data.error && err.response.data.error.message) {
+        errorMessage = err.response.data.error.message; // Use OpenAI specific error if available
+      } else if (err.message) {
+        errorMessage = err.message;
+      }
+      res.status(500).json({ error: 'Failed to process images.', details: errorMessage });
     }
   });
 
