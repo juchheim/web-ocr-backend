@@ -35,11 +35,11 @@ export default function createManageTagsRoutes(db) {
     });
 
     // @route   GET /api/manage/tags/all
-    // @desc    Get asset tags for all users (admin function)
-    // @access  Private (Admin Only)
-    router.get('/all', adminProtect, async (req, res) => {
+    // @desc    Get asset tags for all users
+    // @access  Private (Any authenticated user)
+    router.get('/all', protectRoute, async (req, res) => {
         try {
-            console.log('[Manage Tags Route] Fetching tags for all users by admin:', req.user.email);
+            console.log('[Manage Tags Route] Fetching tags for all users by:', req.user.email);
             
             // No userId filter - returns all tags
             const tags = await AssetTags.find({}).sort({ scannedAt: -1 }).toArray();
@@ -94,12 +94,9 @@ export default function createManageTagsRoutes(db) {
         try {
             let query = {};
             if (showAllUsers === 'true') {
-                // Admin check for exporting all users' data
-                if (!req.user || req.user.role !== 'admin') {
-                    return res.status(403).json({ message: 'Not authorized, admin role required to export all user data' });
-                }
+                // Allow any authenticated user to see all tags - removed admin check
                 // query remains empty to fetch all
-                console.log(`[Export CSV Admin] Exporting all users' data by admin: ${req.user.email}`);
+                console.log(`[Export CSV] Exporting all users' data by user: ${req.user.email}`);
             } else {
                 query.userId = req.user.id;
             }
