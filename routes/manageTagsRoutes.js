@@ -150,37 +150,51 @@ export default function createManageTagsRoutes(db) {
             }
             
             const tags = await AssetTags.find(query).sort({ scannedAt: -1 }).toArray();
+            console.log(`[Export CSV] Found ${tags.length} tags for export query:`, query);
 
             if (tags.length === 0) {
                 return res.status(404).json({ message: 'No tags found for the given criteria.' });
             }
 
-            // Dynamically import json2csv
-            const { Parser } = await import('json2csv');
+            try {
+                // Dynamically import json2csv
+                console.log('[Export CSV] Importing json2csv module...');
+                const { Parser } = await import('json2csv');
+                console.log('[Export CSV] Successfully imported json2csv module');
 
-            const fields = [
-                { label: 'Room Number', value: 'roomNumber', default: 'N/A' },
-                { label: 'Asset Tag', value: 'assetTag' },
-                { label: 'Asset URL', value: 'assetUrl' },
-                { label: 'Date Recorded', value: (row) => new Date(row.scannedAt).toISOString() }
-            ];
-            const json2csvParser = new Parser({ fields, header: true });
-            const csv = json2csvParser.parse(tags);
+                const fields = [
+                    { label: 'Room Number', value: 'roomNumber', default: 'N/A' },
+                    { label: 'Asset Tag', value: 'assetTag' },
+                    { label: 'Asset URL', value: 'assetUrl' },
+                    { label: 'Date Recorded', value: (row) => new Date(row.scannedAt).toISOString() }
+                ];
+                console.log('[Export CSV] Creating parser with fields:', fields);
+                const json2csvParser = new Parser({ fields, header: true });
+                
+                // Validate tags data structure before parsing to catch issues early
+                console.log('[Export CSV] Validating tags data. First tag sample:', JSON.stringify(tags[0]).substring(0, 200));
+                
+                console.log('[Export CSV] Parsing tags to CSV...');
+                const csv = json2csvParser.parse(tags);
+                console.log(`[Export CSV] Successfully parsed ${tags.length} tags to CSV format`);
 
-            res.header('Content-Type', 'text/csv');
-            const fileNameDate = date ? `_${date}` : roomNumber ? `_room_${roomNumber}` : '_all';
-            const filename = `asset_tags_export${fileNameDate}.csv`;
-            // Use more compatible content-disposition format for cross-browser support
-            res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-            res.send(csv);
-
+                res.header('Content-Type', 'text/csv');
+                const fileNameDate = date ? `_${date}` : roomNumber ? `_room_${roomNumber}` : '_all';
+                res.attachment(`asset_tags_export${fileNameDate}.csv`);
+                res.send(csv);
+                console.log('[Export CSV] CSV successfully sent to client');
+            } catch (error) {
+                console.error('[Export CSV] Error in CSV generation:', error);
+                throw error; // Let the outer catch handle it
+            }
         } catch (err) {
             console.error('Error exporting asset tags:', err);
+            console.error('[Export CSV] Stack trace:', err.stack);
             // Check for json2csv specific errors if any, though it's less common to have specific named errors here
             if (err.message.includes('json2csv')) {
-                 return res.status(500).send('Error during CSV conversion.');
+                 return res.status(500).json({ message: 'Error during CSV conversion.', details: err.message });
             }
-            res.status(500).send('Server error');
+            res.status(500).json({ message: 'Server error', details: err.message });
         }
     });
 
