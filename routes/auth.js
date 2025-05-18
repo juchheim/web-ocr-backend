@@ -3,8 +3,23 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
 import { body, validationResult } from 'express-validator';
+import rateLimit from 'express-rate-limit';
 
 const router = express.Router();
+
+// Rate limiter for authentication routes
+const authLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 100, // Limit each IP to 100 requests per windowMs (e.g. 100 login/register attempts per 15 mins)
+    standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
+    legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+    message: 'Too many requests from this IP, please try again after 15 minutes'
+});
+
+// Apply the limiter to all routes in this router, or specific ones if needed
+// For broader protection, it's often applied to all auth routes.
+// If specific routes need different limits, create separate limiters.
+router.use(authLimiter); // Apply to all /auth routes
 
 // Middleware to protect routes
 export const protect = async (req, res, next) => {
@@ -19,7 +34,7 @@ export const protect = async (req, res, next) => {
             }
             tokenToVerify = token;
 
-            const decoded = jwt.verify(tokenToVerify, process.env.JWT_SECRET || 'yourjwtsecretplaceholder');
+            const decoded = jwt.verify(tokenToVerify, process.env.JWT_SECRET);
             req.user = await User.findById(decoded.id).select('-password');
             if (!req.user) {
                 return res.status(401).json({ message: 'Not authorized, user not found' });
@@ -39,6 +54,20 @@ export const protect = async (req, res, next) => {
     }
     // Note: The `if (!token)` check that was previously at the end is effectively covered by the logic above.
     // If tokenToVerify was never assigned (e.g. no auth header or not Bearer), the else block above handles it.
+};
+
+// Middleware to protect admin routes
+export const adminProtect = (req, res, next) => {
+    protect(req, res, () => { // Call the base protect middleware
+        if (req.user && req.user.role === 'admin') {
+            next(); // User is admin, proceed
+        } else {
+            // If req.user is not set by protect, it means protect already sent a response.
+            // If req.user is set but role is not admin, then send 403 Forbidden.
+            if (res.headersSent) return; // Avoid sending multiple responses if protect already did
+            res.status(403).json({ message: 'Not authorized, admin role required' });
+        }
+    });
 };
 
 // @route   POST /auth/register
@@ -117,7 +146,7 @@ router.post('/login',
 
             jwt.sign(
                 payload,
-                process.env.JWT_SECRET || 'yourjwtsecretplaceholder',
+                process.env.JWT_SECRET,
                 { expiresIn: process.env.JWT_EXPIRES_IN || '1h' },
                 (err, token) => {
                     if (err) throw err;

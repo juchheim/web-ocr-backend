@@ -1,9 +1,19 @@
 import express from 'express';
 import upload from '../middlewares/multerConfig.js';
 import { protect as protectRoute } from './auth.js'; // Import the protect middleware
+import rateLimit from 'express-rate-limit'; // Import express-rate-limit
+
+// Rate limiter for image processing route
+const imageProcessingLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 300, // Limit each IP to 300 requests per windowMs
+    standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
+    legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+    message: 'Too many image processing requests from this IP, please try again after 15 minutes'
+});
 
 // Helper function to generate the asset URL
-function generateAssetUrl(assetTagString) {
+function generateAssetUrl(assetTagString, region = 'HC') {
   if (!assetTagString || typeof assetTagString !== 'string') {
     return null;
   }
@@ -23,7 +33,9 @@ function generateAssetUrl(assetTagString) {
 
   const normalizedForPadding = String(numericValue); // Convert back to string for padding
 
-  const baseUrl = "https://humphreys.camarathon.net/MarathonWeb/FA/Activities/Assets/AssetMain.aspx?FormAction=Edit&AssetNo=";
+  // Determine base domain based on region
+  const baseDomain = region === 'YC' ? 'yazoo' : 'humphreys';
+  const baseUrl = `https://${baseDomain}.camarathon.net/MarathonWeb/FA/Activities/Assets/AssetMain.aspx?FormAction=Edit&AssetNo=`;
   const paddedTag = normalizedForPadding.padStart(12, '0'); // Pad to 12 digits
   return `${baseUrl}${paddedTag}&SortGrid=AssetNo&ItemFilterID=170851`;
 }
@@ -32,11 +44,14 @@ function generateAssetUrl(assetTagString) {
 export default function createOcrRoutes(openai, db) {
   const router = express.Router();
 
-  // Apply protectRoute middleware before the multer upload and the main route handler
-  router.post('/extract-text', protectRoute, upload.array('photos'), async (req, res) => {
+  // Apply protectRoute middleware and the new rate limiter before the multer upload and the main route handler
+  router.post('/extract-text', imageProcessingLimiter, protectRoute, upload.array('photos', 50), async (req, res) => {
     // The req.user object will be available here if authentication is successful
     const { id: userId, email: userEmail } = req.user;
-    const { assetTag: manualAssetTag, assetUrl: manualAssetUrl, roomNumber: roomNumberFromBody, captureDetail, sourceImageOriginalName } = req.body;
+    const { assetTag: manualAssetTag, assetUrl: manualAssetUrl, roomNumber: roomNumberFromBody, captureDetail, sourceImageOriginalName, region: regionFromBody } = req.body;
+
+    // Default region to HC if not provided
+    const region = regionFromBody || 'HC';
 
     // Handle Manual Entry
     if (sourceImageOriginalName === 'manual_entry' && manualAssetTag && manualAssetUrl) {
@@ -126,7 +141,7 @@ export default function createOcrRoutes(openai, db) {
         const captureDetailFromRequest = req.body.captureDetail; // Use this for storing
 
         if (potentialAssetTag !== '') { // Only attempt to process if AI returned some non-empty (after trim and quote removal) text
-          const assetUrl = generateAssetUrl(potentialAssetTag); // Validates and generates URL
+          const assetUrl = generateAssetUrl(potentialAssetTag, region); // Pass region to generateAssetUrl
 
           if (assetUrl) { // If URL is successfully generated, it means potentialAssetTag was a valid numeric string
             try {
@@ -138,6 +153,7 @@ export default function createOcrRoutes(openai, db) {
                 sourceImageOriginalName: file.originalname, // Optional: store original filename
                 userId: userId, // Associate with the logged-in user (destructured above)
                 userEmail: userEmail, // Store user's email for convenience (destructured above)
+                region: region, // Store selected region
               };
 
               if (roomNumberFromBody) {

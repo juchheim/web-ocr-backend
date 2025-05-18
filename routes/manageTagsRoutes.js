@@ -1,5 +1,5 @@
 import express from 'express';
-import { protect as protectRoute } from './auth.js';
+import { protect as protectRoute, adminProtect } from './auth.js';
 import mongoose from 'mongoose'; // Needed for ObjectId
 // import { Parser } from 'json2csv'; // For CSV export
 
@@ -7,8 +7,7 @@ import mongoose from 'mongoose'; // Needed for ObjectId
 export default function createManageTagsRoutes(db) {
     const router = express.Router();
 
-    // Protect all routes in this router
-    router.use(protectRoute);
+    // router.use(protectRoute); // Removed global protectRoute, apply per-route
 
     // Get the AssetTags collection
     const AssetTags = db.collection('asset_tags');
@@ -16,7 +15,7 @@ export default function createManageTagsRoutes(db) {
     // @route   GET /api/manage/tags
     // @desc    Get all asset tags for the logged-in user, optionally filtered
     // @access  Private
-    router.get('/', async (req, res) => {
+    router.get('/', protectRoute, async (req, res) => {
         try {
             console.log('[Manage Tags Route] req.user.id:', req.user.id, 'Type:', typeof req.user.id);
             const query = { userId: req.user.id }; // Only fetch tags for the logged-in user
@@ -37,10 +36,10 @@ export default function createManageTagsRoutes(db) {
 
     // @route   GET /api/manage/tags/all
     // @desc    Get asset tags for all users (admin function)
-    // @access  Private
-    router.get('/all', async (req, res) => {
+    // @access  Private (Admin Only)
+    router.get('/all', adminProtect, async (req, res) => {
         try {
-            console.log('[Manage Tags Route] Fetching tags for all users by:', req.user.email);
+            console.log('[Manage Tags Route] Fetching tags for all users by admin:', req.user.email);
             
             // No userId filter - returns all tags
             const tags = await AssetTags.find({}).sort({ scannedAt: -1 }).toArray();
@@ -55,7 +54,7 @@ export default function createManageTagsRoutes(db) {
     // @route   DELETE /manage/tags
     // @desc    Delete one or more asset tags
     // @access  Private
-    router.delete('/', async (req, res) => {
+    router.delete('/', protectRoute, async (req, res) => {
         const { ids } = req.body; // Expect an array of string IDs
 
         if (!ids || !Array.isArray(ids) || ids.length === 0) {
@@ -89,12 +88,21 @@ export default function createManageTagsRoutes(db) {
     // @route   GET /manage/tags/export
     // @desc    Export asset tags as CSV
     // @access  Private
-    router.get('/export', async (req, res) => {
+    router.get('/export', protectRoute, async (req, res) => {
         const { date, roomNumber, timezoneOffset: timezoneOffsetStr, showAllUsers } = req.query; // date format YYYY-MM-DD
 
         try {
-            // Only filter by userId if not showing all users
-            const query = showAllUsers === 'true' ? {} : { userId: req.user.id };
+            let query = {};
+            if (showAllUsers === 'true') {
+                // Admin check for exporting all users' data
+                if (!req.user || req.user.role !== 'admin') {
+                    return res.status(403).json({ message: 'Not authorized, admin role required to export all user data' });
+                }
+                // query remains empty to fetch all
+                console.log(`[Export CSV Admin] Exporting all users' data by admin: ${req.user.email}`);
+            } else {
+                query.userId = req.user.id;
+            }
             
             console.log(`[Export CSV] showAllUsers=${showAllUsers}, using query:`, query);
 

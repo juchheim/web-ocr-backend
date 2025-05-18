@@ -5,6 +5,7 @@ import OpenAI from 'openai';
 import mongoose from 'mongoose'; // Changed from MongoClient
 import path from 'path'; // Import path module
 import { fileURLToPath } from 'url'; // Import fileURLToPath module
+import helmet from 'helmet'; // Import helmet
 
 import configuredCors from './middlewares/corsConfig.js';
 // Note: multerConfig.js exports the configured 'upload' instance, which is used in ocrRoutes.js directly.
@@ -44,6 +45,7 @@ let db;
 const app = express();
 
 // ---------- middleware ----------
+app.use(helmet()); // Use helmet for security headers
 app.use(configuredCors); // Use the configured CORS middleware
 app.use(express.json()); // Middleware to parse JSON bodies (needed for auth routes)
 app.use(express.urlencoded({ extended: true })); // Middleware for URL-encoded data
