@@ -80,11 +80,13 @@ export default function createOcrRoutes(openai, db) {
           if (assetUrl) { // If URL is successfully generated, it means potentialAssetTag was a valid numeric string
             try {
               const assetTagsCollection = db.collection('asset_tags');
-              const docToInsert = { 
+              const docToInsert = {
                 assetTag: potentialAssetTag, // Store the numeric string as captured (and trimmed)
                 assetUrl: assetUrl, // Store the generated URL
                 scannedAt: new Date(),
-                sourceImageOriginalName: file.originalname // Optional: store original filename
+                sourceImageOriginalName: file.originalname, // Optional: store original filename
+                userId: req.user.id, // Associate with the logged-in user
+                userEmail: req.user.email // Store user's email for convenience
               };
 
               if (roomNumberFromBody) {

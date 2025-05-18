@@ -10,6 +10,7 @@ import configuredCors from './middlewares/corsConfig.js';
 // Note: multerConfig.js exports the configured 'upload' instance, which is used in ocrRoutes.js directly.
 import createOcrRoutes from './routes/ocrRoutes.js';
 import authRoutes, { protect as protectRoute } from './routes/auth.js'; // Import auth routes and protect middleware
+import createManageTagsRoutes from './routes/manageTagsRoutes.js'; // Import manage tags routes
 
 // Determine __dirname for ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -71,28 +72,12 @@ async function startServer() {
   app.use('/auth', authRoutes); // Mount authentication routes (e.g., /auth/login, /auth/register)
 
   // Pass openai client and Mongoose connection (db) to ocrRoutes factory
-  // Protect the /extract-text route
-  const ocrRoutes = createOcrRoutes(openai, db); 
-  // Assuming ocrRoutes is an Express router instance
-  // And that /extract-text is a POST route on it
-  // To protect a specific route within ocrRoutes, it's better to apply middleware in ocrRoutes.js
-  // For now, if ocrRoutes only contains /extract-text, we can do this:
-  // app.use('/', protectRoute, ocrRoutes); // This would protect all routes in ocrRoutes
-  // Let's assume createOcrRoutes returns a router and we want to protect its main endpoint
-  // The most straightforward way is to modify ocrRoutes.js to accept and use the `protectRoute` middleware.
-  // However, for a quick application, if /extract-text is the primary route:
-  // We need to ensure `ocrRoutes` are defined *after* `authRoutes` if they share base paths or have catch-alls.
-  // And that the middleware is applied correctly.
+  const ocrRouter = createOcrRoutes(openai, db);
+  app.use('/', ocrRouter); // Mount OCR routes (e.g., /extract-text)
 
-  // For the /extract-text route specifically:
-  // We need to get the router from createOcrRoutes and then find the specific route to protect.
-  // Or, more simply, modify ocrRoutes.js. 
-  // Let's assume ocrRoutes.js exports a router that has a POST /extract-text route.
-  // A common pattern: router.post('/extract-text', upload.array('photos'), (req, res) => { ... });
-  // We would change it to: router.post('/extract-text', protectRoute, upload.array('photos'), (req, res) => { ... });
-  
-  // For now, let's just mount it. We'll need to modify ocrRoutes.js to use `protectRoute`
-  app.use('/', ocrRoutes); // Mount OCR routes (e.g., /extract-text)
+  // Create and mount manage tags routes, passing the db connection
+  const manageTagsRouter = createManageTagsRoutes(db);
+  app.use('/api/manage/tags', protectRoute, manageTagsRouter); // Protect and mount asset management routes
 
   // Health check
   app.get('/', (req, res) => {
