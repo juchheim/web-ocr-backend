@@ -169,7 +169,9 @@ export default function createManageTagsRoutes(db) {
 
             res.header('Content-Type', 'text/csv');
             const fileNameDate = date ? `_${date}` : roomNumber ? `_room_${roomNumber}` : '_all';
-            res.attachment(`asset_tags_export${fileNameDate}.csv`);
+            const filename = `asset_tags_export${fileNameDate}.csv`;
+            // Use more compatible content-disposition format for cross-browser support
+            res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
             res.send(csv);
 
         } catch (err) {
