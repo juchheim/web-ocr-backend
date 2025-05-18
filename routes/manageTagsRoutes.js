@@ -90,7 +90,7 @@ export default function createManageTagsRoutes(db) {
     // @desc    Export asset tags as CSV
     // @access  Private
     router.get('/export', async (req, res) => {
-        const { date, roomNumber } = req.query; // date format YYYY-MM-DD
+        const { date, roomNumber, timezoneOffset: timezoneOffsetStr } = req.query; // date format YYYY-MM-DD
 
         try {
             const query = { userId: req.user.id };
@@ -104,10 +104,39 @@ export default function createManageTagsRoutes(db) {
                 if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
                     return res.status(400).json({ message: 'Invalid date format. Please use YYYY-MM-DD.' });
                 }
-                const startDate = new Date(date + 'T00:00:00.000Z');
-                const endDate = new Date(date + 'T23:59:59.999Z');
-                if (isNaN(startDate.getTime())) {
+                let startDate = new Date(date + 'T00:00:00.000Z');
+                let endDate = new Date(date + 'T23:59:59.999Z');
+                
+                if (isNaN(startDate.getTime())) { // Check if the base date string itself is valid
                      return res.status(400).json({ message: 'Invalid date value.'});
+                }
+
+                if (timezoneOffsetStr) {
+                    const timezoneOffsetMinutes = parseInt(timezoneOffsetStr, 10);
+                    if (!isNaN(timezoneOffsetMinutes)) {
+                        // timezoneOffset from client is new Date().getTimezoneOffset()
+                        // This offset is the difference in minutes between UTC and local time.
+                        // Positive for timezones west of UTC (e.g., 300 for America/New_York which is UTC-5 during standard time).
+                        // The 'date' (e.g., "2025-05-17") represents a day in the user's local timezone.
+                        // The start of this local day (e.g., "2025-05-17T00:00:00" local) needs to be converted to UTC.
+                        // If user's local time is L, and offset_from_getTimezoneOffset is O (e.g. 300 for EST),
+                        // then L = UTC - O (e.g. EST = UTC - 5 hours = UTC - 300 minutes)
+                        // So, UTC = L + O.
+                        // The query needs UTC timestamps.
+                        // startDate and endDate are initially the start/end of the 'date' in UTC (00:00Z to 23:59Z).
+                        // To find the equivalent UTC range for the user's local day, we add the offset.
+                        // E.g., if date is "2025-05-17", offset is 300 (UTC-5):
+                        // User's 2025-05-17T00:00:00 local = 2025-05-17T05:00:00Z.
+                        // User's 2025-05-17T23:59:59 local = 2025-05-18T04:59:59Z.
+                        // So, we take the initial UTC day (2025-05-17T00Z) and add 5 hours to get the start of the query range in UTC.
+                        const offsetMilliseconds = timezoneOffsetMinutes * 60 * 1000;
+                        
+                        startDate = new Date(startDate.getTime() + offsetMilliseconds);
+                        endDate = new Date(endDate.getTime() + offsetMilliseconds);
+                    } else {
+                        // Optional: log a warning or handle error if timezoneOffset is not a valid number
+                        console.warn(`[Export by Date] Received invalid timezoneOffset: ${timezoneOffsetStr}. Proceeding without offset adjustment.`);
+                    }
                 }
                 query.scannedAt = { $gte: startDate, $lte: endDate };
             }
