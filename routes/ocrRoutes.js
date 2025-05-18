@@ -48,7 +48,12 @@ export default function createOcrRoutes(openai, db) {
       try {
         const base64 = file.buffer.toString('base64');
         const dataUrl = `data:${file.mimetype};base64,${base64}`;
-        const imagePayload = [{ type: 'image_url', image_url: { url: dataUrl, detail: 'low' } }];
+        
+        // Get capture detail from request body, default to 'low' if not provided or invalid
+        const requestedDetail = req.body.captureDetail;
+        const imageDetail = (requestedDetail === 'high' || requestedDetail === 'low') ? requestedDetail : 'auto'; // Use 'auto' as a safe default
+
+        const imagePayload = [{ type: 'image_url', image_url: { url: dataUrl, detail: imageDetail } }];
 
         const openAiPayload = {
           model: 'gpt-4.1-nano',
