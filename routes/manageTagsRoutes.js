@@ -90,10 +90,13 @@ export default function createManageTagsRoutes(db) {
     // @desc    Export asset tags as CSV
     // @access  Private
     router.get('/export', async (req, res) => {
-        const { date, roomNumber, timezoneOffset: timezoneOffsetStr } = req.query; // date format YYYY-MM-DD
+        const { date, roomNumber, timezoneOffset: timezoneOffsetStr, showAllUsers } = req.query; // date format YYYY-MM-DD
 
         try {
-            const query = { userId: req.user.id };
+            // Only filter by userId if not showing all users
+            const query = showAllUsers === 'true' ? {} : { userId: req.user.id };
+            
+            console.log(`[Export CSV] showAllUsers=${showAllUsers}, using query:`, query);
 
             if (roomNumber) {
                 query.roomNumber = roomNumber;
