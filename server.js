@@ -44,6 +44,9 @@ let db;
 // ---------- app setup ----------
 const app = express();
 
+// Trust proxy - needed for express-rate-limit behind a proxy
+app.set('trust proxy', 1);
+
 // ---------- middleware ----------
 app.use(helmet()); // Use helmet for security headers
 app.use(configuredCors); // Use the configured CORS middleware
