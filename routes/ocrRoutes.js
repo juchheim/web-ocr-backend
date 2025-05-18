@@ -76,10 +76,13 @@ export default function createOcrRoutes(openai, db) {
         const assetTagFromAI = completion.choices?.[0]?.message?.content || ''; // Get raw response
         allExtractedTexts.push(assetTagFromAI.trim()); // Add trimmed version to results for frontend
 
-        const potentialAssetTag = assetTagFromAI.trim(); // This is what AI returned, trimmed
+        let potentialAssetTag = assetTagFromAI.trim(); // This is what AI returned, trimmed
+        // Aggressively remove any quote characters (single or double) that the AI might have added
+        potentialAssetTag = potentialAssetTag.replace(/["']/g, '').trim();
+
         const roomNumberFromBody = req.body.roomNumber ? req.body.roomNumber.trim() : null;
 
-        if (potentialAssetTag !== '') { // Only attempt to process if AI returned some non-empty (after trim) text
+        if (potentialAssetTag !== '') { // Only attempt to process if AI returned some non-empty (after trim and quote removal) text
           const assetUrl = generateAssetUrl(potentialAssetTag); // Validates and generates URL
 
           if (assetUrl) { // If URL is successfully generated, it means potentialAssetTag was a valid numeric string
