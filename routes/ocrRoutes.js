@@ -117,17 +117,17 @@ export default function createOcrRoutes(openai, db) {
         const openAiPayload = {
           model: 'gpt-4.1-nano',
           max_tokens: 2048, // Max tokens per image analysis
+          temperature: 0, // Deterministic output
           messages: [
             {
               role: 'user',
               content: [
-                { type: 'text', text: 'Scan the image for an asset tag number. Ignore FEDERAL PROGRAMS numbers, even if it is 5 digits long or the most visible number in the image. Asset tag numbers are always 5 digits long, but may also contain leading zeros that would add to the 5 digit amount. Extract the full sequence of digits that represents the asset tag number. Include all zeros. Return the asset tag number. If there is no visible asset tag number, return NULL' },                
+                { type: 'text', text: 'You are an OCR reader looking for a 5 digit number. This 5 digit number may have additional leading zeros. A leading zero is a zero that comes before the 5 digits and does not count as a digit. Return only the 5 digits, truncating the leading zeros. Do not return anything other than 5 digits. If there is no visible 5 digit number, return NULL' },
                 ...imagePayload, // Send only one image at a time
               ],
             },
           ],
         };
-
 
         console.log(`Processing one image. Using OpenAI model: ${openAiPayload.model}`);
         // console.log('Sending one image to OpenAI:', JSON.stringify(openAiPayload, null, 2)); // Can be verbose for multiple images
