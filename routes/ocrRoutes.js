@@ -115,7 +115,7 @@ export default function createOcrRoutes(openai, db) {
         const imagePayload = [{ type: 'image_url', image_url: { url: dataUrl, detail: imageDetail } }];
 
         const openAiPayload = {
-          model: 'gpt-4.1-nano',
+          model: 'gpt-4.1-mini',
           max_tokens: 2048, // Max tokens per image analysis
           temperature: 0, // Deterministic output
           messages: [
