@@ -127,6 +127,7 @@ export default function createOcrRoutes(openai, db) {
           ],
         };
 
+        
         console.log(`Processing one image. Using OpenAI model: ${openAiPayload.model}`);
         // console.log('Sending one image to OpenAI:', JSON.stringify(openAiPayload, null, 2)); // Can be verbose for multiple images
 
