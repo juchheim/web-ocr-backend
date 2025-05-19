@@ -109,7 +109,8 @@ export default function createOcrRoutes(openai, db) {
         
         // Get capture detail from request body, default to 'low' if not provided or invalid
         const requestedDetail = req.body.captureDetail;
-        const imageDetail = (requestedDetail === 'high' || requestedDetail === 'low') ? requestedDetail : 'auto'; // Use 'auto' as a safe default
+        // Map 'veryHigh' to 'high' for OpenAI, otherwise use 'low' or 'high' directly. Default to 'auto' if invalid.
+        const imageDetail = (requestedDetail === 'high' || requestedDetail === 'veryHigh') ? 'high' : (requestedDetail === 'low' ? 'low' : 'auto');
 
         const imagePayload = [{ type: 'image_url', image_url: { url: dataUrl, detail: imageDetail } }];
 
@@ -120,7 +121,7 @@ export default function createOcrRoutes(openai, db) {
             {
               role: 'user',
               content: [
-                { type: 'text', text: 'Scan the image for an asset tag number. Asset tag numbers are numerical identifiers, typically 5 digits long, not counting leading zeros. Extract the sequence of digits that represents the asset tag, including any leading zeros if they appear to be part of the tag. IMPORTANT: If there is no clear asset tag number visible in the image, or if the image does not contain any numbers, return an empty string. Do not guess or invent a number. ONLY RETURN THE ASSET TAG NUMBER or an empty string.' },
+                { type: 'text', text: 'Scan the image for an asset tag number. Asset tag numbers are numerical identifiers, 5 digits long, not counting leading zeros. Extract the sequence of digits that represents the asset tag, including any leading zeros if they appear to be part of the tag. IMPORTANT: If there is no clear asset tag number visible in the image, or if the image does not contain any numbers, return an null. Do not guess or invent a number. ONLY RETURN THE ASSET TAG NUMBER or null.' },
                 ...imagePayload, // Send only one image at a time
               ],
             },
