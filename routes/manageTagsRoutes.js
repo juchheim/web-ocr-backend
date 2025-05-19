@@ -214,11 +214,17 @@ export default function createManageTagsRoutes(db) {
             const update = {};
             if (assetTag !== undefined) update.assetTag = assetTag;
             if (roomNumber !== undefined) update.roomNumber = roomNumber;
+            
             const result = await AssetTags.findOneAndUpdate(query, { $set: update }, { returnDocument: 'after' });
-            if (!result.value) {
+            
+            // Handle both newer and older MongoDB driver result formats
+            if (!result && !result?.value) {
                 return res.status(404).json({ message: 'Tag not found or not owned by user.' });
             }
-            res.json({ message: 'Tag updated successfully.', tag: result.value });
+            
+            // Return the updated document, accommodating different driver versions
+            const updatedTag = result.value || result;
+            res.json({ message: 'Tag updated successfully.', tag: updatedTag });
         } catch (err) {
             console.error('Error updating asset tag:', err);
             if (err.name === 'BSONTypeError' || err.name === 'CastError') {
