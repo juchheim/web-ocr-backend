@@ -121,7 +121,7 @@ export default function createOcrRoutes(openai, db) {
             {
               role: 'user',
               content: [
-                { type: 'text', text: 'Scan the image for an asset tag number. Asset tag numbers are numerical identifiers, 5 digits long – DO NOT COUNT LEADING ZEROS. Extract the sequence of digits that represents the asset tag, including any leading zeros if they appear to be part of the tag. IMPORTANT: If there is no clear asset tag number visible in the image, or if the image does not contain any numbers, return an null. Do not guess or invent a number. ONLY RETURN THE ASSET TAG NUMBER or null.' },
+                { type: 'text', text: 'Scan the image for an asset tag number. Asset tag numbers are numerical identifiers, 5 digits long – DO NOT COUNT LEADING ZEROS. Extract the sequence of digits that represents the asset tag, including any leading zeros or following zeros if they appear to be part of the tag. IMPORTANT: If there is no clear asset tag number visible in the image, or if the image does not contain any numbers, return an null. Do not guess or invent a number. ONLY RETURN THE ASSET TAG NUMBER or null.' },
                 ...imagePayload, // Send only one image at a time
               ],
             },
