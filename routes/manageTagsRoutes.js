@@ -198,5 +198,35 @@ export default function createManageTagsRoutes(db) {
         }
     });
 
+    // @route   PUT /api/manage/tags/:id
+    // @desc    Update assetTag and/or roomNumber for a tag
+    // @access  Private
+    router.put('/:id', protectRoute, async (req, res) => {
+        const { id } = req.params;
+        const { assetTag, roomNumber } = req.body;
+        if (!assetTag && !roomNumber) {
+            return res.status(400).json({ message: 'No fields to update.' });
+        }
+        try {
+            const objectId = new mongoose.Types.ObjectId(id);
+            // Only allow update if the tag belongs to the user
+            const query = { _id: objectId, userId: req.user.id };
+            const update = {};
+            if (assetTag !== undefined) update.assetTag = assetTag;
+            if (roomNumber !== undefined) update.roomNumber = roomNumber;
+            const result = await AssetTags.findOneAndUpdate(query, { $set: update }, { returnDocument: 'after' });
+            if (!result.value) {
+                return res.status(404).json({ message: 'Tag not found or not owned by user.' });
+            }
+            res.json({ message: 'Tag updated successfully.', tag: result.value });
+        } catch (err) {
+            console.error('Error updating asset tag:', err);
+            if (err.name === 'BSONTypeError' || err.name === 'CastError') {
+                return res.status(400).json({ message: 'Invalid ID format provided.' });
+            }
+            res.status(500).json({ message: 'Server error' });
+        }
+    });
+
     return router;
 } 
