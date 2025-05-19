@@ -121,13 +121,14 @@ export default function createOcrRoutes(openai, db) {
             {
               role: 'user',
               content: [
-                { type: 'text', text: 'Scan the image for an asset tag number. Ignore FEDERAL PROGRAMS numbers. Asset tag numbers are 5 digits long, but may also contain leading zeros. Extract the full sequence of digits that represents the asset tag number. Include all zeros. Return the asset tag number. If there is no visible asset tag number, return NULL' },                ...imagePayload, // Send only one image at a time
+                { type: 'text', text: 'Scan the image for an asset tag number. Ignore FEDERAL PROGRAMS numbers, even if it is 5 digits long or the most visible number in the image. Asset tag numbers are always 5 digits long, but may also contain leading zeros that would add to the 5 digit amount. Extract the full sequence of digits that represents the asset tag number. Include all zeros. Return the asset tag number. If there is no visible asset tag number, return NULL' },                
+                ...imagePayload, // Send only one image at a time
               ],
             },
           ],
         };
 
-        
+
         console.log(`Processing one image. Using OpenAI model: ${openAiPayload.model}`);
         // console.log('Sending one image to OpenAI:', JSON.stringify(openAiPayload, null, 2)); // Can be verbose for multiple images
 
