@@ -34,7 +34,7 @@ function generateAssetUrl(assetTagString, region = 'HC') {
   const normalizedForPadding = String(numericValue); // Convert back to string for padding
 
   // Determine base domain based on region
-  const baseDomain = region === 'YC' ? 'yazoo' : 'humphreys';
+  const baseDomain = region === 'YC' ? 'yazoocity' : 'humphreys';
   const baseUrl = `https://${baseDomain}.camarathon.net/MarathonWeb/FA/Activities/Assets/AssetMain.aspx?FormAction=Edit&AssetNo=`;
   const paddedTag = normalizedForPadding.padStart(12, '0'); // Pad to 12 digits
   return `${baseUrl}${paddedTag}&SortGrid=AssetNo&ItemFilterID=170851`;
