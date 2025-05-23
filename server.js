@@ -123,6 +123,7 @@ process.on('SIGTERM', async () => {
   process.exit(0);
 });
 
+
 // Start the server
 startServer().catch(err => {
   console.error("Failed to start server:", err);
