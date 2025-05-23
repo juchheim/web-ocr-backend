@@ -148,7 +148,7 @@ export default function createOcrRoutes(openai, db, broadcastNewTag) {
               {
                 role: 'user',
                 content: [
-                  { type: 'text', text: 'You are an OCR reader looking for a 5 digit number. This 5 digit number may have additional leading zeros. A leading zero is a zero that comes before the 5 digits and does not count as a digit. Return only the 5 digits, truncating the leading zeros. Do not return anything other than 5 digits. If there is no visible 5 digit number, return NULL' },
+                  { type: 'text', text: 'You are an OCR reader looking for a 5 digit number. This 5 digit number may have additional leading zeros. A leading zero is a zero that comes before the 5 digits and does not count as a digit. Return only the 5 digits, truncating the leading zeros. Do not return anything other than 5 digits. If there is no visible 5 digit number, return NULL. ONLY RETURN THE NUMBER OR NULL. DO NOT RETURN ANYTHING ELSE.' },
                   ...imagePayload, // Send only one image at a time
                 ],
               },
