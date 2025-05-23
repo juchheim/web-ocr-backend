@@ -49,8 +49,8 @@ function generateAssetUrl(assetTagString, region = 'HC') {
   return `${baseUrl}${paddedTag}&SortGrid=AssetNo&ItemFilterID=170851`;
 }
 
-// This function accepts the openai client and db instance as arguments
-export default function createOcrRoutes(openai, db) {
+// This function accepts the openai client, db instance, and broadcast function as arguments
+export default function createOcrRoutes(openai, db, broadcastNewTag) {
   const router = express.Router();
 
   // Apply protectRoute middleware and the new rate limiter before the multer upload and the main route handler
@@ -88,12 +88,21 @@ export default function createOcrRoutes(openai, db) {
         // }
 
         const result = await assetTagsCollection.insertOne(docToInsert);
+        
+        // Add the inserted ID to the document for broadcasting
+        const tagWithId = { ...docToInsert, _id: result.insertedId };
+        
         let logMessage = `Manual asset tag '${docToInsert.assetTag}' (URL: ${docToInsert.assetUrl})`;
         if (docToInsert.roomNumber) {
           logMessage += ` for room '${docToInsert.roomNumber}'`;
         }
         logMessage += ` saved to MongoDB with id: ${result.insertedId}`;
         console.log(logMessage);
+
+        // Broadcast new tag to SSE connections
+        if (broadcastNewTag) {
+          broadcastNewTag(tagWithId);
+        }
 
         return res.json({ 
           texts: [docToInsert.assetTag], // For consistency with OCR response structure
@@ -214,12 +223,21 @@ export default function createOcrRoutes(openai, db) {
               }
 
               const result = await assetTagsCollection.insertOne(docToInsert);
+              
+              // Add the inserted ID to the document for broadcasting
+              const tagWithId = { ...docToInsert, _id: result.insertedId };
+              
               let logMessage = `Asset tag '${potentialAssetTag}' (URL: ${assetUrl})`;
               if (roomNumberFromBody) {
                 logMessage += ` for room '${roomNumberFromBody}'`;
               }
               logMessage += ` from image '${file.originalname || 'unknown'}' saved to MongoDB with id: ${result.insertedId}`;
               console.log(logMessage);
+
+              // Broadcast new tag to SSE connections
+              if (broadcastNewTag) {
+                broadcastNewTag(tagWithId);
+              }
             } catch (dbErr) {
               console.error("Error saving asset tag to MongoDB:", dbErr);
               // Continue processing other images even if one DB save fails

@@ -81,13 +81,15 @@ async function startServer() {
   // ---------- routes ----------
   app.use('/auth', authRoutes); // Mount authentication routes (e.g., /auth/login, /auth/register)
 
-  // Pass openai and gemini clients plus Mongoose connection (db) to ocrRoutes factory
-  const ocrRouter = createOcrRoutes(openai, db);
-  app.use('/', ocrRouter); // Mount OCR routes (e.g., /extract-text)
-
-  // Create and mount manage tags routes, passing the db connection
+  // Create and mount manage tags routes first, so we can access the broadcast function
   const manageTagsRouter = createManageTagsRoutes(db);
-  app.use('/api/manage/tags', protectRoute, manageTagsRouter); // Protect and mount asset management routes
+  
+  // Mount all manage tags routes with protection (SSE endpoint handles its own auth)
+  app.use('/api/manage/tags', manageTagsRouter);
+
+  // Pass openai, gemini clients, db connection, and broadcast function to ocrRoutes factory
+  const ocrRouter = createOcrRoutes(openai, db, manageTagsRouter.broadcastNewTag);
+  app.use('/', ocrRouter); // Mount OCR routes (e.g., /extract-text)
 
   // Health check
   app.get('/', (req, res) => {

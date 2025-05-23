@@ -1,7 +1,11 @@
 import express from 'express';
 import { protect as protectRoute, adminProtect } from './auth.js';
 import mongoose from 'mongoose'; // Needed for ObjectId
+import jwt from 'jsonwebtoken'; // Import JWT at the top instead of dynamic import
 // import { Parser } from 'json2csv'; // For CSV export
+
+// Store active SSE connections
+const sseConnections = new Map(); // userId -> Set of response objects
 
 // This function accepts the db instance (Mongoose connection) as an argument
 export default function createManageTagsRoutes(db) {
@@ -233,6 +237,137 @@ export default function createManageTagsRoutes(db) {
             res.status(500).json({ message: 'Server error' });
         }
     });
+
+    // @route   GET /api/manage/tags/stream
+    // @desc    Server-Sent Events endpoint for streaming new asset tags
+    // @access  Private (token via query parameter since EventSource doesn't support headers)
+    router.get('/stream', async (req, res) => {
+        try {
+            // Get token from query parameter since EventSource doesn't support custom headers
+            const token = req.query.token;
+            const showAllUsers = req.query.showAllUsers === 'true';
+            
+            console.log('[SSE] Stream connection attempt with showAllUsers:', showAllUsers);
+            console.log('[SSE] Token present:', !!token);
+            
+            if (!token) {
+                console.log('[SSE] No token provided in query parameter');
+                return res.status(401).json({ message: 'Access token required' });
+            }
+
+            // Check if the token is a string like 'null' or 'undefined'
+            if (token === 'null' || token === 'undefined') {
+                console.log('[SSE] Token is null or undefined string');
+                return res.status(401).json({ message: 'Invalid token format' });
+            }
+
+            // Use the same JWT secret as other routes
+            const jwtSecret = process.env.JWT_SECRET;
+            if (!jwtSecret) {
+                console.error('[SSE] JWT_SECRET not found in environment');
+                return res.status(500).json({ message: 'Server configuration error' });
+            }
+            
+            let decoded;
+            try {
+                decoded = jwt.verify(token, jwtSecret);
+                console.log('[SSE] Token verified successfully for user:', decoded.id);
+            } catch (jwtErr) {
+                console.log('[SSE] JWT verification failed:', jwtErr.name, jwtErr.message);
+                if (jwtErr.name === 'TokenExpiredError') {
+                    return res.status(401).json({ message: 'Token has expired' });
+                } else if (jwtErr.name === 'JsonWebTokenError') {
+                    return res.status(401).json({ message: 'Invalid token' });
+                } else {
+                    return res.status(401).json({ message: 'Token verification failed' });
+                }
+            }
+
+            const userId = decoded.id;
+            console.log('[SSE] Setting up SSE connection for userId:', userId, 'showAllUsers:', showAllUsers);
+            
+            // Set up SSE headers
+            res.writeHead(200, {
+                'Content-Type': 'text/event-stream',
+                'Cache-Control': 'no-cache',
+                'Connection': 'keep-alive',
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Headers': 'Cache-Control'
+            });
+
+            // Initialize connection tracking
+            const connectionKey = showAllUsers ? 'all' : userId;
+            if (!sseConnections.has(connectionKey)) {
+                sseConnections.set(connectionKey, new Set());
+            }
+            sseConnections.get(connectionKey).add(res);
+
+            console.log(`[SSE] New connection for ${showAllUsers ? 'all users' : `user ${userId}`}. Total connections: ${sseConnections.get(connectionKey).size}`);
+
+            // Send initial connection confirmation
+            res.write(`data: ${JSON.stringify({ type: 'connected', message: 'SSE connection established' })}\n\n`);
+
+            // Clean up on client disconnect
+            req.on('close', () => {
+                if (sseConnections.has(connectionKey)) {
+                    sseConnections.get(connectionKey).delete(res);
+                    console.log(`[SSE] Connection closed for ${showAllUsers ? 'all users' : `user ${userId}`}. Remaining connections: ${sseConnections.get(connectionKey).size}`);
+                    
+                    // Clean up empty connection sets
+                    if (sseConnections.get(connectionKey).size === 0) {
+                        sseConnections.delete(connectionKey);
+                    }
+                }
+            });
+        } catch (err) {
+            console.error('[SSE] Error setting up connection:', err);
+            res.status(500).json({ message: 'Internal server error' });
+        }
+    });
+
+    // Function to broadcast new tag to SSE connections
+    function broadcastNewTag(tag) {
+        console.log(`[SSE] Broadcasting new tag: ${tag.assetTag} by user ${tag.userId}`);
+        console.log(`[SSE] Current SSE connections: ${Array.from(sseConnections.keys()).join(', ')}`);
+        console.log(`[SSE] Connection counts: ${Array.from(sseConnections.entries()).map(([key, set]) => `${key}: ${set.size}`).join(', ')}`);
+        
+        // Broadcast to user's own connections
+        if (sseConnections.has(tag.userId)) {
+            const userConnections = sseConnections.get(tag.userId);
+            console.log(`[SSE] Broadcasting to ${userConnections.size} user-specific connections for user ${tag.userId}`);
+            userConnections.forEach(res => {
+                try {
+                    res.write(`data: ${JSON.stringify({ type: 'newTag', tag })}\n\n`);
+                    console.log(`[SSE] Successfully sent to user connection`);
+                } catch (err) {
+                    console.error('[SSE] Error writing to user connection:', err);
+                    userConnections.delete(res);
+                }
+            });
+        } else {
+            console.log(`[SSE] No user-specific connections found for user ${tag.userId}`);
+        }
+
+        // Broadcast to "all users" connections
+        if (sseConnections.has('all')) {
+            const allConnections = sseConnections.get('all');
+            console.log(`[SSE] Broadcasting to ${allConnections.size} "all users" connections`);
+            allConnections.forEach(res => {
+                try {
+                    res.write(`data: ${JSON.stringify({ type: 'newTag', tag })}\n\n`);
+                    console.log(`[SSE] Successfully sent to all-users connection`);
+                } catch (err) {
+                    console.error('[SSE] Error writing to all-users connection:', err);
+                    allConnections.delete(res);
+                }
+            });
+        } else {
+            console.log(`[SSE] No "all users" connections found`);
+        }
+    }
+
+    // Expose the broadcast function so it can be used by other routes
+    router.broadcastNewTag = broadcastNewTag;
 
     return router;
 } 
