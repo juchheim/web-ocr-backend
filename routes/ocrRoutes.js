@@ -2,6 +2,15 @@ import express from 'express';
 import upload from '../middlewares/multerConfig.js';
 import { protect as protectRoute } from './auth.js'; // Import the protect middleware
 import rateLimit from 'express-rate-limit'; // Import express-rate-limit
+import { GoogleGenerativeAI } from '@google/generative-ai';
+import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+// For loading .env in this isolated context if needed for on-demand client creation
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+dotenv.config({ path: path.resolve(__dirname, '../.env') }); // Correct path to .env in backend dir
 
 // Rate limiter for image processing route
 const imageProcessingLimiter = rateLimit({
@@ -49,6 +58,10 @@ export default function createOcrRoutes(openai, db) {
     // The req.user object will be available here if authentication is successful
     const { id: userId, email: userEmail } = req.user;
     const { assetTag: manualAssetTag, assetUrl: manualAssetUrl, roomNumber: roomNumberFromBody, captureDetail, sourceImageOriginalName, region: regionFromBody } = req.body;
+
+    // Determine which AI model to use (default to Gemini)
+    const aiModelFromBody = (req.body.aiModel || '').toLowerCase();
+    const aiModel = aiModelFromBody === 'openai' ? 'openai' : 'gemini';
 
     // Default region to HC if not provided
     const region = regionFromBody || 'HC';
@@ -112,28 +125,62 @@ export default function createOcrRoutes(openai, db) {
         // Map 'veryHigh' to 'high' for OpenAI, otherwise use 'low' or 'high' directly. Default to 'auto' if invalid.
         const imageDetail = (requestedDetail === 'high' || requestedDetail === 'veryHigh') ? 'high' : (requestedDetail === 'low' ? 'low' : 'auto');
 
-        const imagePayload = [{ type: 'image_url', image_url: { url: dataUrl, detail: imageDetail } }];
+        let assetTagFromAI = '';
 
-        const openAiPayload = {
-          model: 'gpt-4.1-mini',
-          max_tokens: 2048, // Max tokens per image analysis
-          temperature: 0, // Deterministic output
-          messages: [
-            {
-              role: 'user',
-              content: [
-                { type: 'text', text: 'You are an OCR reader looking for a 5 digit number. This 5 digit number may have additional leading zeros. A leading zero is a zero that comes before the 5 digits and does not count as a digit. Return only the 5 digits, truncating the leading zeros. Do not return anything other than 5 digits. If there is no visible 5 digit number, return NULL' },
-                ...imagePayload, // Send only one image at a time
-              ],
+        if (aiModel === 'openai') {
+          // ---------- OpenAI Vision ----------
+          const imagePayload = [{ type: 'image_url', image_url: { url: dataUrl, detail: imageDetail } }];
+
+          const openAiPayload = {
+            model: 'gpt-4.1-mini',
+            max_tokens: 2048, // Max tokens per image analysis
+            temperature: 0, // Deterministic output
+            messages: [
+              {
+                role: 'user',
+                content: [
+                  { type: 'text', text: 'You are an OCR reader looking for a 5 digit number. This 5 digit number may have additional leading zeros. A leading zero is a zero that comes before the 5 digits and does not count as a digit. Return only the 5 digits, truncating the leading zeros. Do not return anything other than 5 digits. If there is no visible 5 digit number, return NULL' },
+                  ...imagePayload, // Send only one image at a time
+                ],
+              },
+            ],
+          };
+
+          console.log(`Processing one image with OpenAI model '${openAiPayload.model}'.`);
+          const completion = await openai.chat.completions.create(openAiPayload);
+          assetTagFromAI = completion.choices?.[0]?.message?.content || '';
+        } else {
+          // ---------- Gemini Vision ----------
+          // Instantiate Gemini client on-demand
+          if (!process.env.GEMINI_API_KEY) {
+            console.error("CRITICAL in ocrRoutes: GEMINI_API_KEY is not available!");
+            // Handle error appropriately, maybe throw or return an error response
+            // For now, logging and letting it potentially fail at client creation
+          }
+          const geminiClient = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+
+          console.log('Processing one image with Gemini model "gemini-2.5-flash-preview-05-20".');
+
+          // Build Gemini prompt parts
+          const promptText = { text: 'You are an OCR reader looking for a 5 digit number. This 5 digit number may have additional leading zeros. A leading zero is a zero that comes before the 5 digits and does not count as a digit. Return only the 5 digits, truncating the leading zeros. Do not return anything other than 5 digits. If there is no visible 5 digit number, return NULL' };
+
+          const imagePart = {
+            inlineData: {
+              mimeType: file.mimetype,
+              data: base64,
             },
-          ],
-        };
+          };
 
-        console.log(`Processing one image. Using OpenAI model: ${openAiPayload.model}`);
-        // console.log('Sending one image to OpenAI:', JSON.stringify(openAiPayload, null, 2)); // Can be verbose for multiple images
+          try {
+            const model = geminiClient.getGenerativeModel({ model: 'gemini-2.5-flash-preview-05-20' });
+            const geminiResponse = await model.generateContent([promptText, imagePart]);
+            assetTagFromAI = geminiResponse?.response?.text() || '';
+          } catch (gemErr) {
+            console.error('Error from Gemini API:', gemErr);
+            throw gemErr; // Let outer catch handle this
+          }
+        }
 
-        const completion = await openai.chat.completions.create(openAiPayload);
-        const assetTagFromAI = completion.choices?.[0]?.message?.content || ''; // Get raw response
         allExtractedTexts.push(assetTagFromAI.trim()); // Add trimmed version to results for frontend
 
         let potentialAssetTag = assetTagFromAI.trim(); // This is what AI returned, trimmed
@@ -156,6 +203,7 @@ export default function createOcrRoutes(openai, db) {
                 userId: userId, // Associate with the logged-in user (destructured above)
                 userEmail: userEmail, // Store user's email for convenience (destructured above)
                 region: region, // Store selected region
+                aiModel: aiModel, // Store which AI model was used
               };
 
               if (roomNumberFromBody) {

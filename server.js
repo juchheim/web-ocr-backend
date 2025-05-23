@@ -19,7 +19,8 @@ const __dirname = path.dirname(__filename);
 
 // ---------- config ----------
 // Explicitly load .env file from the backend directory
-dotenv.config({ path: path.resolve(__dirname, '.env') }); 
+dotenv.config({ path: path.resolve(__dirname, '.env') });
+
 const PORT = process.env.PORT || 3000;
 const MONGODB_URI = process.env.MONGODB_URI;
 
@@ -32,6 +33,10 @@ if (!MONGODB_URI) {
 }
 if (!process.env.OPENAI_API_KEY) {
     console.error('FATAL ERROR: OPENAI_API_KEY is not defined in the .env file.');
+    process.exit(1);
+}
+if (!process.env.GEMINI_API_KEY) {
+    console.error('FATAL ERROR: GEMINI_API_KEY is not defined in the .env file.');
     process.exit(1);
 }
 
@@ -76,7 +81,7 @@ async function startServer() {
   // ---------- routes ----------
   app.use('/auth', authRoutes); // Mount authentication routes (e.g., /auth/login, /auth/register)
 
-  // Pass openai client and Mongoose connection (db) to ocrRoutes factory
+  // Pass openai and gemini clients plus Mongoose connection (db) to ocrRoutes factory
   const ocrRouter = createOcrRoutes(openai, db);
   app.use('/', ocrRouter); // Mount OCR routes (e.g., /extract-text)
 
